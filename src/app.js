@@ -4,6 +4,7 @@ const swaggerSpec = require("./swagger");
 const { dbConnect } = require("./config/database");
 const app = express();
 const User = require("./models/user");
+const bcrypt = require("bcrypt")
 
 app.use(express.json());
 // Serve Swagger documentation
@@ -30,11 +31,31 @@ dbConnect()
 // sign up api
 app.post("/signup", async (req, res) => {
   try {
-    const user = new User(req.body);
+    // Check maximum number of skills
+    if (req.body?.skills?.length > 3) {
+      throw new Error("You cannot add more than 3 skills");
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+
+    // Create user with hashed password
+    const user = new User({
+      ...req.body,
+      password: hashedPassword,
+    });
+
     await user.save();
-    res.status(201).send("User created successfully", user);
+
+    res.status(201).send({
+      message: "User created successfully",
+      user,
+    });
   } catch (er) {
-    res.status(400).send("bad request", er);
+    res.status(400).send({
+      message: "Bad request",
+      error: er.message,
+    });
   }
 });
 
@@ -72,14 +93,83 @@ app.delete("/user", async (req, res) => {
 
 // update
 
-app.path("/updateUser", async (req, res) => {
+app.patch("/updateUser/:id", async (req, res) => {
   try {
-    const user = await User.findOneAndUpdate(
-      { firstName: req.body.firstName },
-      { firstName: req.body.newFirstName, lastName: req.body.newLastName },
+    console.log(req.body);
+    const AllowedFields = [
+      "firstName",
+      "lastName",
+      "gender",
+      "about",
+      "password",
+      "skills",
+    ];
+
+    const isAllowed = Object.keys(req.body).every((k) => {
+      return AllowedFields.includes(k);
+    });
+
+    console.log(isAllowed);
+
+    if (!isAllowed) {
+      throw new Error("the field you are trying to update is not allowed");
+    }
+    if (req.body?.skills.length > 3) {
+      throw new Error("You cannot add more than 3 skills");
+    }
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      {
+        new: true,
+        runValidators: true,
+      },
     );
-    res.send("User updated successfully", user);
-  } catch (er) {
-    res.send("Something went wrong");
+
+    if (!user) {
+      return res.status(404).send("User not found");
+    }
+
+    res.send({
+      message: "User updated successfully",
+      user,
+    });
+  } catch (err) {
+    res.status(400).send({
+      message: "Something went wrong",
+      error: err.message,
+    });
   }
 });
+
+// login api
+
+app.post("/login", async(req,res)=>
+{
+  try{
+
+    const {emailId,password}=req.body;
+    const user= await User.findOne({emailId: emailId})
+    if(!user)
+    {
+      throw new Error("User not found")
+    }
+    const isPassCorrect= await bcrypt.compare(password,user.password);
+    if(!isPassCorrect)
+    {
+      throw new Error("Password is incorrect")
+    }
+
+    else
+    {
+      res.send("login success")
+    }
+  }
+  catch(er)
+  {
+    res.send({
+      message :" Something went wrong",
+     error: er.message
+    })
+  }
+})
