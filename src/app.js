@@ -4,9 +4,13 @@ const swaggerSpec = require("./swagger");
 const { dbConnect } = require("./config/database");
 const app = express();
 const User = require("./models/user");
-const bcrypt = require("bcrypt")
+const bcrypt = require("bcrypt");
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
+const {userAuth} = require("./middlewares/userAuth")
 
 app.use(express.json());
+app.use(cookieParser());
 // Serve Swagger documentation
 app.use("/api-docs", swaggerUI.serve, swaggerUI.setup(swaggerSpec));
 
@@ -74,6 +78,9 @@ app.get("/feed", async (req, res) => {
 app.get("/user", async (req, res) => {
   try {
     const user = await User.findOne({ firstName: req.body.firstName });
+    const cookie = req.cookies;
+    console.log(cookie);
+
     res.send(user);
   } catch (er) {
     res.send("Something went wrong", er);
@@ -144,32 +151,41 @@ app.patch("/updateUser/:id", async (req, res) => {
 
 // login api
 
-app.post("/login", async(req,res)=>
+app.post("/login", async (req, res) => {
+  try {
+    const { emailId, password } = req.body;
+    const user = await User.findOne({ emailId: emailId });
+    if (!user) {
+      throw new Error("User not found");
+    }
+    const isPassCorrect = await bcrypt.compare(password, user.password);
+    if (!isPassCorrect) {
+      throw new Error("Password is incorrect");
+    } else {
+      const token = jwt.sign({ _id: user._id }, "shhhhh");
+
+      res.cookie("token", token);
+      res.send("login success");
+    }
+  } catch (er) {
+    res.send({
+      message: " Something went wrong",
+      error: er.message,
+    });
+  }
+});
+
+app.get("/profile", userAuth,async(req,res)=>
 {
   try{
+   
+const user = req.user;
+    res.send(user)
+    
 
-    const {emailId,password}=req.body;
-    const user= await User.findOne({emailId: emailId})
-    if(!user)
-    {
-      throw new Error("User not found")
-    }
-    const isPassCorrect= await bcrypt.compare(password,user.password);
-    if(!isPassCorrect)
-    {
-      throw new Error("Password is incorrect")
-    }
-
-    else
-    {
-      res.send("login success")
-    }
   }
   catch(er)
   {
-    res.send({
-      message :" Something went wrong",
-     error: er.message
-    })
+    res.send(er.message)
   }
 })
