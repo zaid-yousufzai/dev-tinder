@@ -1,8 +1,44 @@
-const express= require("express");
-const userRouter=express.Router();
+const express = require("express");
+const { userAuth } = require("../middlewares/userAuth");
+const ConnectionRequest = require("../models/connectionRequest");
+const userRouter = express.Router();
 
+// connection Api
 
+userRouter.get("/connections", userAuth, async (req, res) => {
+  try {
+    const connections = await ConnectionRequest.find({
+      $or: [
+        {
+          toUserId: req.user._id,
+          status: "accepted",
+        },
+        {
+          fromUserId: req.user._id,
+          status: "accepted",
+        },
+      ],
+    })
+      .populate("fromUserId", ["firstName", "lastname"])
+      .populate("toUserId", ["firstName", "lastName"]);
 
+    const data = connections.map((row) => {
+      if (row.fromUserId._id.equals(req.user._id)) {
+        return row.toUserId;
+      }
+
+      return row.fromUserId;
+    });
+    res.status(200).json({
+      data: data,
+      message: "Connections fetched successfully",
+    });
+  } catch (er) {
+    res.status(500).json({
+      message: er.message,
+    });
+  }
+});
 
 // get all users
 // app.get("/feed", async (req, res) => {
@@ -13,7 +49,6 @@ const userRouter=express.Router();
 //     res.send("Something went wrong", er);
 //   }
 // });
-
 
 // get specific user
 
@@ -29,7 +64,6 @@ const userRouter=express.Router();
 //   }
 // });
 
-
 //delete the user
 
 // app.delete("/user", async (req, res) => {
@@ -41,4 +75,4 @@ const userRouter=express.Router();
 //   }
 // });
 
-module.exports=userRouter;
+module.exports = userRouter;
